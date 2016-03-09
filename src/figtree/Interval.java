@@ -23,6 +23,18 @@ public class Interval {
 		return this.right;
 	}
 	
+	public boolean overlaps(Interval other) {
+		return this.right >= other.left && this.left <= other.right;
+	}
+	
+	public boolean equals(Object o) {
+		if (o instanceof Interval) {
+			Interval other = (Interval) o;
+			return this.left == other.left && this.right == other.right;
+		}
+		return false;
+	}
+	
 	private int left;
 	private int right;
 }
