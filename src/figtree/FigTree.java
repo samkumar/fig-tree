@@ -98,9 +98,9 @@ public class FigTree<V> {
 				rvbuilder.append(node);
 				int numentries = node.numEntries();
 				for (int i = 0; i <= numentries; i++) {
-					/* From the B-Tree invariants I could move this check outside the loop.
-					 * But for debugging, it's useful to know if for some reason the B-Tree
-					 * isn't balanced for some reason.
+					/* Due to the B Tree invariants I could move this check outside the loop.
+					 * But for debugging, it's useful to know if for some reason the B Tree
+					 * isn't balanced.
 					 */
 					if (node.subtree(i) != null) {
 						nextlevel.add(node.subtree(i));

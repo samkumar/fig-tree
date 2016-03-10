@@ -7,10 +7,28 @@ public class Test {
 		
 		FigTree<Integer> f = new FigTree<Integer>(2);
 		
-		for (int x = 1; x <= 11; x++) {
+		for (int j = 1; j <= 19; j++) {
+			int x = j << 1;
 			System.out.printf("Inserting %d\n", x);
 			f.insert(new Interval(x, x), x);
 			System.out.println(f);
+			for (int y = 1; y <= x; y++) {
+				Integer v = f.lookup(y);
+				if ((y & 0x1) == 0) {
+					if (v != y) {
+						System.out.println("Bad lookup");
+					}
+				} else {
+					if (v != null) {
+						System.out.println("Bad lookup");
+					}
+				}
+			}
+		}
+		
+		Integer z = f.lookup(1000);
+		if (z != null) {
+			System.out.println("Bad lookup");
 		}
 	}
 
