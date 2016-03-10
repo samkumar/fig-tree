@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 
 public class FigTree<V> {
 	public FigTree(int order) {
@@ -202,6 +203,69 @@ public class FigTree<V> {
 			this.entries.set(start, newent);
 			this.entries.subList(start + 1, end).clear();
 			this.subtrees.subList(start + 1, end).clear();
+		}
+		
+		/**
+		 * Invalidates a left portion of this node, given a cached interval in an ancestor.
+		 * @param invalid A cached interval in an ancestor of this node.
+		 */
+		public void invalidateLeft(Interval invalid) {
+			Iterator<FigTreeEntry> entryiter = this.entries.iterator();
+			FigTreeEntry e;
+			Interval entryint = null;
+			int i = 0;
+			for (e = null; entryiter.hasNext(); e = entryiter.next()) {
+				entryint = e.interval();
+				if (invalid.contains(entryint)) {
+					i++;
+				} else {
+					break;
+				}
+			}
+			if (e == null) {
+				// No entries in this node
+				return;
+			}
+			boolean hasNext = entryiter.hasNext();
+			this.entries.subList(0, i).clear();
+			if (hasNext && invalid.overlaps(entryint)) {
+				entryint = new Interval(invalid.right() + 1, entryint.right());
+				e.setInterval(entryint);
+				i++;
+			}
+			this.subtrees.subList(0, i).clear();
+		}
+		
+		/**
+		 * Invalidates a right portion of this node, given a cached interval in an ancestor.
+		 * @param invalid A cached interval in an ancestor of this node.
+		 */
+		public void invalidateRight(Interval invalid) {
+			int numentries = this.entries.size();
+			ListIterator<FigTreeEntry> entryiter = this.entries.listIterator(numentries);
+			FigTreeEntry e;
+			Interval entryint = null;
+			int i = numentries;
+			for (e = null; entryiter.hasPrevious(); e = entryiter.previous()) {
+				entryint = e.interval();
+				if (invalid.contains(entryint)) {
+					i--;
+				} else {
+					break;
+				}
+			}
+			if (e == null) {
+				// No entries in this node
+				return;
+			}
+			boolean hasPrevious = entryiter.hasPrevious();
+			this.entries.subList(i, numentries).clear();
+			if (hasPrevious && invalid.overlaps(entryint)) {
+				entryint = new Interval(entryint.left(), invalid.left() + 1);
+				e.setInterval(entryint);
+				i--;
+			}
+			this.subtrees.subList(i, numentries).clear();
 		}
 		
 		public FigTreeEntry entry(int i) {
