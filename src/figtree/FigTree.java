@@ -9,13 +9,114 @@ public class FigTree<V> {
 	public FigTree(int order) {
 		this.root = new FigTreeNode(0);
 		this.ORDER = order;
+		this.SPLITLIMIT = 1 + (order << 1);
 	}
 	
-	public synchronized void put(Interval range, V value) {
+	public void insert(Interval range, V value) {
+		ArrayList<FigTreeNode> path = new ArrayList<FigTreeNode>();
+		ArrayList<Integer> pathIndices = new ArrayList<Integer>();
+		FigTreeNode currnode = this.root;
+		int i;
+		
+		outerloop:
+		do {
+			int numentries = currnode.numEntries();
+			for (i = 0; i < numentries; i++) {
+				FigTreeEntry current = currnode.entry(i);
+				Interval currival = current.interval();
+				if (currival.left() == range.left()) {
+					currnode.replaceEntries(i, i + 1, current);
+					return;
+				} else if (currival.left() > range.left()) {
+					path.add(currnode);
+					pathIndices.add(i);
+					currnode = currnode.subtree(i);
+					continue outerloop;
+				}
+			}
+			path.add(currnode);
+			pathIndices.add(numentries);
+			currnode = currnode.subtree(numentries);
+		} while (currnode != null);
+				
+		// Now we insert into a leaf and push up
+		FigTreeNode rv = null;
+		FigTreeEntry topush = new FigTreeEntry(range, value);
+		FigTreeNode left = null;
+		FigTreeNode right = null;
+		FigTreeNode insertinto;
+		int insertindex;
+		for (int pathindex = path.size() - 1; pathindex >= 0; pathindex--) {
+			insertinto = path.get(pathindex);
+			insertindex = pathIndices.get(pathindex);
+			rv = insertinto.insert(topush, insertindex, left, right);
+			if (rv == null) {
+				// Nothing to push up
+				return;
+			}
+			topush = rv.entry(0);
+			left = rv.subtree(0);
+			right = rv.subtree(1);
+		}
+		
+		// No parent to push to
+		this.root = rv;
 	}
 	
-	public synchronized V lookup(Interval range) {
+	public V lookup(int location) {
+		FigTreeNode currnode = this.root;
+		
+		outerloop:
+		do {
+			int numentries = currnode.numEntries();
+			for (int i = 0; i < numentries; i++) {
+				FigTreeEntry current = currnode.entry(i);
+				Interval currival = current.interval();
+				if (currival.contains(location)) {
+					return current.value();
+				} else if (currival.left() > location) {
+					currnode = currnode.subtree(i);
+					continue outerloop;
+				}
+			}
+			currnode = currnode.subtree(numentries);
+		} while (currnode != null);
+		
 		return null;
+	}
+	
+	public String toString() {
+		StringBuilder rvbuilder = new StringBuilder();
+		
+		ArrayList<FigTreeNode> currlevel = new ArrayList<FigTreeNode>();
+		ArrayList<FigTreeNode> nextlevel = new ArrayList<FigTreeNode>();
+		
+		currlevel.add(this.root);
+		
+		while (currlevel.size() != 0) {
+			for (FigTreeNode node : currlevel) {
+				rvbuilder.append(node);
+				int numentries = node.numEntries();
+				for (int i = 0; i <= numentries; i++) {
+					/* From the B-Tree invariants I could move this check outside the loop.
+					 * But for debugging, it's useful to know if for some reason the B-Tree
+					 * isn't balanced for some reason.
+					 */
+					if (node.subtree(i) != null) {
+						nextlevel.add(node.subtree(i));
+					}
+				}
+			}
+			ArrayList<FigTreeNode> temp = nextlevel;
+			nextlevel = currlevel;
+			currlevel = temp;
+			
+			nextlevel.clear();
+			
+			rvbuilder.append('\n');
+		}
+		
+		return rvbuilder.toString();
 	}
 	
 	private class FigTreeNode {
@@ -45,15 +146,29 @@ public class FigTree<V> {
 		 */
 		public FigTreeNode insert(FigTreeEntry newent, FigTreeNode leftChild, FigTreeNode rightChild) {
 			int index = -Collections.<FigTreeEntry>binarySearch(this.entries, newent);
-			if (index < 0
-					|| (index != 0 && newent.overlaps(this.entries.get(index - 1)))
+			if (index < 0) {
+				throw new IllegalArgumentException("Insert()ing an interval that already exists");
+			}
+			return this.insert(newent, index, leftChild, rightChild);
+		}
+		
+		/**
+		 * Inserts an entry into this node, and returns the entry to be pushed up to the parent,
+		 * given the index at which to insert the entry.
+		 * @param index The index at which to insert the entry.
+		 * @param leftChild The new left child of the inserted entry (or null if this is a leaf).
+		 * @param rightChild The new right child of the inserted entry (or null if this is a leaf).
+		 * @return The entry to be pushed up to the parent, as a node with two children, or null if no node is pushed up.
+		 */
+		public FigTreeNode insert(FigTreeEntry newent, int index, FigTreeNode leftChild, FigTreeNode rightChild) {
+			if ((index != 0 && newent.overlaps(this.entries.get(index - 1)))
 					|| (index != entries.size() && newent.overlaps(this.entries.get(index)))) {
 				throw new IllegalStateException("Insert() violates no-overlap invariant");
 			}
 			entries.add(index, newent);
 			subtrees.set(index, leftChild);
 			subtrees.add(index + 1, rightChild);
-			if (entries.size() == 1 + (FigTree.this.ORDER << 1)) {
+			if (entries.size() == FigTree.this.SPLITLIMIT) {
 				// Split the node and push middle entry to parent
 				FigTreeNode left = new FigTreeNode(this.HEIGHT);
 				FigTreeNode right = new FigTreeNode(this.HEIGHT);
@@ -69,7 +184,7 @@ public class FigTree<V> {
 				
 				FigTreeEntry middleEntry = entryIter.next();
 				right.subtrees.set(0, subtreeIter.next());
-				for (i = i + 1; i < FigTree.this.ORDER; i++) {
+				for (i = i + 1; i < FigTree.this.SPLITLIMIT; i++) {
 					right.entries.add(entryIter.next());
 					right.subtrees.add(subtreeIter.next());
 				}
@@ -83,16 +198,38 @@ public class FigTree<V> {
 			return null;
 		}
 		
-		public List<FigTreeEntry> entries() {
-			return Collections.<FigTreeEntry>unmodifiableList(entries);
+		public void replaceEntries(int start, int end, FigTreeEntry newent) {
+			this.entries.set(start, newent);
+			this.entries.subList(start + 1, end).clear();
+			this.subtrees.subList(start + 1, end).clear();
+		}
+		
+		public FigTreeEntry entry(int i) {
+			return entries.get(i);
 		}
 		
 		public FigTreeNode subtree(int i) {
 			return subtrees.get(i);
 		}
 		
+		public int numEntries() {
+			return entries.size();
+		}
+		
 		public boolean isLeaf() {
 			return this.HEIGHT == 0;
+		}
+		
+		public String toString() {
+			StringBuilder rvbuilder = new StringBuilder();
+			rvbuilder.append('{');
+			for (FigTreeEntry entry : entries) {
+				rvbuilder.append(entry);
+				rvbuilder.append(',');
+			}
+			rvbuilder.append('}');
+			
+			return rvbuilder.toString();
 		}
 		
 		private List<FigTreeEntry> entries;
@@ -126,10 +263,15 @@ public class FigTree<V> {
 			return other.irange.left() - this.irange.left();
 		}
 		
+		public String toString() {
+			return String.format("(%s: %s)", this.irange.toString(), this.value.toString());
+		}
+		
 		private Interval irange;
 		private V value;
 	}
 	
 	private FigTreeNode root;
 	private final int ORDER;
+	private final int SPLITLIMIT;
 }

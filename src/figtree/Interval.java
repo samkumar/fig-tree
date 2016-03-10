@@ -35,6 +35,10 @@ public class Interval {
 		return false;
 	}
 	
+	public String toString() {
+		return String.format("[%d, %d]", this.left, this.right);
+	}
+	
 	private int left;
 	private int right;
 }
