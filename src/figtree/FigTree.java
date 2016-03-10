@@ -25,7 +25,7 @@ public class FigTree<V> {
 				FigTreeEntry current = currnode.entry(i);
 				Interval currival = current.interval();
 				if (currival.left() == range.left()) {
-					currnode.replaceEntries(i, i + 1, current);
+					currnode.replaceEntries(i, i + 1, new FigTreeEntry(range, value));
 					return;
 				} else if (currival.left() > range.left()) {
 					path.add(currnode);

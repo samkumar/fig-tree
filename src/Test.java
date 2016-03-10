@@ -1,4 +1,5 @@
 import figtree.*;
+import java.util.HashMap;
 public class Test {
 
 	public static void main(String[] args) {
@@ -9,9 +10,7 @@ public class Test {
 		
 		for (int j = 1; j <= 19; j++) {
 			int x = j << 1;
-			System.out.printf("Inserting %d\n", x);
 			f.insert(new Interval(x, x), x);
-			System.out.println(f);
 			for (int y = 1; y <= x; y++) {
 				Integer v = f.lookup(y);
 				if ((y & 0x1) == 0) {
@@ -30,6 +29,30 @@ public class Test {
 		if (z != null) {
 			System.out.println("Bad lookup");
 		}
+		
+		f.insert(new Interval(4, 4), 5);
+		System.out.println(f);
+		System.out.println(f.lookup(4));
+		
+		FigTree<Integer> f2 = new FigTree<Integer>(3);
+		HashMap<Integer, Integer> rands = new HashMap<Integer, Integer>();
+		final int NUM_INSERTS = 1000;
+		for (int k = 0; k < NUM_INSERTS; k++) {
+			int rand1 = (int) (Math.random() * NUM_INSERTS);
+			int rand2 = (int) (Math.random() * NUM_INSERTS);
+			f2.insert(new Interval(rand1, rand1), rand2);
+			rands.put(rand1, rand2);
+			for (int m = 0; m < NUM_INSERTS; m++) {
+				Integer r = f2.lookup(m);
+				Integer ans = rands.get(m);
+				if (((r == null) != (ans == null)) || (r != null && !r.equals(ans))) {
+					System.out.println("Bad lookup");
+				}
+			}
+		}
+		
+		System.out.println(f2);
+		System.out.println("Finished running tests");
 	}
 
 }
