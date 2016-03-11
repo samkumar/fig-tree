@@ -32,11 +32,19 @@ public class Interval {
 	}
 	
 	public boolean leftOf(Interval other) {
-		return this.right < other.left;
+		return this.leftOf(other.left);
+	}
+	
+	public boolean leftOf(int x) {
+		return this.right < x;
 	}
 	
 	public boolean rightOf(Interval other) {
-		return this.left > other.right;
+		return this.rightOf(other.right);
+	}
+	
+	public boolean rightOf(int x) {
+		return this.left > x;
 	}
 	
 	public boolean equals(Object o) {

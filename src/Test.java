@@ -1,5 +1,6 @@
 import figtree.*;
 import java.util.HashMap;
+import java.util.Iterator;
 public class Test {
 
 	public static void main(String[] args) {
@@ -53,6 +54,20 @@ public class Test {
 		
 		System.out.println(f2);
 		System.out.println("Finished running tests");
+		
+		System.out.println("Running iterator tests");
+		Iterator<Integer> range = f2.read(0, NUM_INSERTS);
+		for (int y = 0; y < NUM_INSERTS; y++) {
+			Integer iterval = range.next();
+			Integer correct = rands.get(y);
+			if (((iterval == null) != (correct == null)) || (iterval != null && !iterval.equals(correct))) {
+				System.out.printf("Bad iteration: %d\n", y);
+			}
+		}
+		if (range.hasNext()) {
+			System.out.println("Iteration did not end.");
+		}
+		System.out.println("Finished running iterator tests");
 	}
 
 }

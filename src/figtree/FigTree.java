@@ -1,10 +1,6 @@
 package figtree;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;
+import java.util.*;
 
 public class FigTree<V> {
 	public FigTree(int order) {
@@ -84,6 +80,120 @@ public class FigTree<V> {
 		} while (currnode != null);
 		
 		return null;
+	}
+	
+	/* This is used just like a struct. */
+	private class FigTreeIterState {
+		/*
+		 * Stores one node in a path of nodes to reach the current point in the iteration.
+		 */
+		
+		public FigTreeIterState(FigTreeNode node, Interval left, Interval right, FigTreeIterState prev) {
+			this.node = node;
+			this.entry = null;
+			if (node != null) {
+				this.entryiter = node.entryIter();
+				this.subtreeiter = node.subtreeIter();
+			}
+			this.leftint = left;
+			this.rightint = right;
+			this.pathprev = prev;
+		}
+		
+		private FigTreeNode node;
+		private FigTreeEntry entry;
+		private Iterator<FigTreeEntry> entryiter;
+		private Iterator<FigTreeNode> subtreeiter;
+		private Interval leftint;
+		private Interval rightint;
+		private FigTreeIterState pathprev;
+	}
+	
+	public Iterator<V> read(int start, int end) {
+		// First, find the start
+		FigTreeIterState rs = new FigTreeIterState(this.root, null, null, null);
+		
+		outerloop:
+		do {
+			while (rs.entryiter.hasNext()) {
+				rs.entry = rs.entryiter.next();
+				Interval currival = rs.entry.interval();
+				if (currival.contains(start)) {
+					break outerloop;
+				} else if (currival.rightOf(start)) {
+					rs = new FigTreeIterState(rs.subtreeiter.next(), rs.leftint, rs.rightint, rs);
+					continue outerloop;
+				}
+				rs.subtreeiter.next();
+			}
+			// So we know what to do when we traverse the subtree and come back here
+			rs.entry = null;
+			rs = new FigTreeIterState(rs.subtreeiter.next(), rs.leftint, rs.rightint, rs);
+		} while (rs.node != null);
+		
+		if (rs.node == null) {
+			/* Didn't find the exact starting byte.
+			 * So, stop at the lowest node we got to.
+			 */
+			rs = rs.pathprev;
+		}
+		final FigTreeIterState rsfinal = rs;
+		
+		return new Iterator<V>() {
+			public V next() {
+				if (this.position >= end) {
+					throw new NoSuchElementException();
+				}
+				V rv = null;
+				
+				notatend:
+				if (rs != null) {
+					/* rs === null  when we reach the end of the file; we backtrack past
+					 * the root and the readstate becomes null.
+					 */
+					if (rs.entry.interval().leftOf(position)) {
+						/* First, descend a subtree until we reach a leaf. */
+						
+						// Mark the entry to come back to after iterating over the subtree
+						rs.entry = rs.entryiter.hasNext() ? rs.entryiter.next() : null;
+						
+						FigTreeNode subtree = rs.subtreeiter.next();
+						while (subtree != null) {
+							rs = new FigTreeIterState(subtree, null, null, rs);
+							if (rs.entryiter.hasNext()) {
+								// So that we know to process it when we come back up here
+								rs.entry = rs.entryiter.next();
+							}
+							subtree = rs.subtreeiter.next();
+						}
+						
+						/* If there was really no subtree (meaning we ended up at the same
+						 * node where we started), or the subtree is empty, backtrack up
+						 * the tree.
+						 */
+						while (rs.entry == null) {
+							rs = rs.pathprev;
+							// If we go past the end of the tree, return null for the unmapped bytes
+							if (rs == null) {
+								break notatend;
+							}
+						}
+					}
+					if (rs.entry.interval().contains(this.position)) {
+						rv = this.rs.entry.value();
+					}
+				}
+				this.position++;
+				return rv;
+			}
+			
+			public boolean hasNext() {
+				return this.position < end;
+			}
+			
+			private int position = start;
+			private FigTreeIterState rs = rsfinal;
+		};
 	}
 	
 	public String toString() {
@@ -211,10 +321,11 @@ public class FigTree<V> {
 		 */
 		public void invalidateLeft(Interval invalid) {
 			Iterator<FigTreeEntry> entryiter = this.entries.iterator();
-			FigTreeEntry e;
+			FigTreeEntry e = null;
 			Interval entryint = null;
 			int i = 0;
-			for (e = null; entryiter.hasNext(); e = entryiter.next()) {
+			while (entryiter.hasNext()) {
+				e = entryiter.next();
 				entryint = e.interval();
 				if (invalid.contains(entryint)) {
 					i++;
@@ -243,10 +354,11 @@ public class FigTree<V> {
 		public void invalidateRight(Interval invalid) {
 			int numentries = this.entries.size();
 			ListIterator<FigTreeEntry> entryiter = this.entries.listIterator(numentries);
-			FigTreeEntry e;
+			FigTreeEntry e = null;
 			Interval entryint = null;
 			int i = numentries;
-			for (e = null; entryiter.hasPrevious(); e = entryiter.previous()) {
+			while (entryiter.hasPrevious()) {
+				e = entryiter.previous();
 				entryint = e.interval();
 				if (invalid.contains(entryint)) {
 					i--;
@@ -266,6 +378,14 @@ public class FigTree<V> {
 				i--;
 			}
 			this.subtrees.subList(i, numentries).clear();
+		}
+		
+		public Iterator<FigTreeEntry> entryIter() {
+			return Collections.unmodifiableList(this.entries).iterator();
+		}
+		
+		public Iterator<FigTreeNode> subtreeIter() {
+			return Collections.unmodifiableList(this.subtrees).iterator();
 		}
 		
 		public FigTreeEntry entry(int i) {
