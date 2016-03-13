@@ -110,11 +110,11 @@ public class FigTree<V> {
 		// First, find the start
 		Interval initvalid = new Interval(Integer.MIN_VALUE, Integer.MAX_VALUE);
 		FigTreeIterState rs = new FigTreeIterState(this.root, initvalid, null);
-		
-		Interval previval;
-		Interval currival = new Interval(Integer.MIN_VALUE, Integer.MIN_VALUE);
+
 		outerloop:
 		do {
+			Interval previval;
+			Interval currival = new Interval(Integer.MIN_VALUE, Integer.MIN_VALUE);
 			while (rs.entryiter.hasNext()) {
 				rs.entry = rs.entryiter.next();
 				previval = currival;
@@ -168,14 +168,14 @@ public class FigTree<V> {
 								rightlimit = rs.entry.interval().left();
 							} else {
 								rs.entry = null;
-								rightlimit = Integer.MIN_VALUE;
+								rightlimit = Integer.MAX_VALUE;
 							}
 							
 							subtree = rs.subtreeiter.next();
 							descendloop:
 							while (subtree != null) {
 								rs = new FigTreeIterState(subtree, rs.valid.restrict(leftlimit, rightlimit), rs);
-								leftlimit = Integer.MAX_VALUE;
+								leftlimit = Integer.MIN_VALUE;
 								if (rs.entryiter.hasNext()) {
 									// So that we know to process it when we come back up here
 									rs.entry = rs.entryiter.next();
@@ -192,7 +192,7 @@ public class FigTree<V> {
 								}
 								
 								if (rs.entry == null) {
-									rightlimit = Integer.MIN_VALUE;
+									rightlimit = Integer.MAX_VALUE;
 								} else {
 									/* If the entry overlaps partially with the interval, then
 									 * we can skip the left subtree.
