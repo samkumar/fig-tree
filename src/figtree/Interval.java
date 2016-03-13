@@ -7,6 +7,9 @@ package figtree;
  */
 public class Interval {
 	public Interval(int left, int right) {
+		if (left > right) {
+			throw new IllegalStateException();
+		}
 		this.left = left;
 		this.right = right;
 	}
@@ -17,6 +20,14 @@ public class Interval {
 	
 	public boolean contains(Interval other) {
 		return this.left <= other.left && this.right >= other.left;
+	}
+	
+	public Interval restrict(Interval to) {
+		return this.restrict(to.left, to.right);
+	}
+	
+	public Interval restrict(int left, int right) {
+		return new Interval(Math.max(this.left, left), Math.min(this.right, right));
 	}
 	
 	public int left() {
