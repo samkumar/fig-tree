@@ -31,6 +31,14 @@ public class Interval {
 		return this.right >= other.left && this.left <= other.right;
 	}
 	
+	public boolean leftOverlaps(Interval other) {
+		return other.contains(this.left);
+	}
+	
+	public boolean rightOverlaps(Interval other) {
+		return other.contains(this.right);
+	}
+	
 	public boolean leftOf(Interval other) {
 		return this.leftOf(other.left);
 	}

@@ -316,6 +316,82 @@ public class FigTree<V> {
 		}
 		
 		/**
+		 * Prunes this node, given that an interval containing all possible valid entries
+		 * (i.e., all entries that are not cached in an ancestor).
+		 * @param valid An interval in which all valid entries in this subtree must exist.
+		 */
+		public void pruneTo(Interval valid) {
+			Iterator<FigTreeEntry> entryiter = this.entries.iterator();
+			Iterator<FigTreeNode> subtreeiter = this.subtrees.iterator();
+			Interval entryint = null;
+			
+			// Drop all entries to the left of VALID, along with left subtrees
+			if (!entryiter.hasNext()) {
+				return;
+			}
+			
+			entryint = entryiter.next().interval();
+			subtreeiter.next();
+			while (entryint.leftOf(valid)) {
+				entryiter.remove();
+				subtreeiter.remove();
+				
+				if (!entryiter.hasNext()) {
+					return;
+				}
+				entryint = entryiter.next().interval();
+				subtreeiter.next();
+			}
+			
+			if (valid.leftOverlaps(entryint)) {
+				subtreeiter.remove();
+				
+				if (!entryiter.hasNext()) {
+					return;
+				}
+				entryint = entryiter.next().interval();
+				subtreeiter.next();
+			}
+			
+			while (valid.contains(entryint)) {
+				if (!entryiter.hasNext()) {
+					return;
+				}
+				entryint = entryiter.next().interval();
+				subtreeiter.next();
+			}
+			
+			/* At this point, entryint is either overlapping with the right edge of
+			 * VALID, or it is beyond VALID. The left subtree, in either case, cannot
+			 * be dropped, since part of it must be in the valid interval. So, just
+			 * skip over it. After this, subtreeiter.next() is the right subtree of
+			 * entryiter.next().
+			 */
+			subtreeiter.next();
+			
+			if (valid.rightOverlaps(entryint)) {
+				subtreeiter.remove();
+				
+				if (!entryiter.hasNext()) {
+					return;
+				}
+				entryint = entryiter.next().interval();
+				subtreeiter.next();
+			}
+			
+			while (entryint.rightOf(valid)) {
+				entryiter.remove();
+				subtreeiter.remove();
+				
+				if (!entryiter.hasNext()) {
+					return;
+				}
+				entryint = entryiter.next().interval();
+				subtreeiter.next();
+			}
+		}
+		
+		/**
 		 * Invalidates a left portion of this node, given a cached interval in an ancestor.
 		 * @param invalid A cached interval in an ancestor of this node.
 		 */
