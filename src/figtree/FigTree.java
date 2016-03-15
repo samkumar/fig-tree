@@ -13,28 +13,119 @@ public class FigTree<V> {
 		ArrayList<FigTreeNode> path = new ArrayList<FigTreeNode>();
 		ArrayList<Integer> pathIndices = new ArrayList<Integer>();
 		FigTreeNode currnode = this.root;
+		
+		Interval valid = new Interval(Integer.MIN_VALUE, Integer.MAX_VALUE);
+		
+		/* We insert two intervals: range, and [range.right() + 1, star]. */
+		int star = range.right();
+		V starval = null;
+		int numentries, i;
+		
+		outerloop:
+			do {
+				currnode.pruneTo(valid);
+				numentries = currnode.numEntries();
+				FigTreeEntry previous;
+				FigTreeEntry current = null;
+				Interval currival = null;
+				Interval previval;
+				for (i = 0; i < numentries; i++) {
+					previous = current;
+					current = currnode.entry(i);
+					currival = current.interval();
+					if (currival.leftOverlaps(range)) {
+						// We need to replace all entries like this with a single entry for "range"
+						int j;
+						previval = currival;
+						for (j = i + 1; j < numentries && (currival = currnode.entry(j).interval()).leftOverlaps(range); j++) {
+							previval = currival;
+						}
+						if (previval.right() > star) {
+							star = previval.right();
+							starval = current.value();
+						}
+						currnode.replaceEntries(i, j, new FigTreeEntry(range, value));
+						break outerloop;
+					} else if (range.leftOverlaps(currival)) {
+						// Adjust this range and keep going (this can only possibly happen for one node)
+						if (currival.right() > star) {
+							star = currival.right();
+							starval = current.value();
+						}
+						currival = new Interval(currival.left(), range.left() - 1);
+						current.setInterval(currival);
+					} else if (currival.rightOf(range)) {
+						path.add(currnode);
+						pathIndices.add(i);
+						currnode = currnode.subtree(i);
+						valid = valid.restrict(previous == null ? Integer.MIN_VALUE : previous.interval().right(), currival.left());
+						continue outerloop;
+					}
+				}
+				path.add(currnode);
+				pathIndices.add(numentries);
+				currnode = currnode.subtree(numentries);
+				valid = valid.restrict(currival == null ? Integer.MIN_VALUE : currival.right(), Integer.MAX_VALUE);
+			} while (currnode != null);
+		
+		if (currnode == null) {
+			// In this case, we actually need to do an insertion...
+			FigTreeNode rv = null;
+			FigTreeEntry topush = new FigTreeEntry(range, value);
+			FigTreeNode left = null;
+			FigTreeNode right = null;
+			FigTreeNode insertinto;
+			int insertindex;
+			for (int pathindex = path.size() - 1; pathindex >= 0; pathindex--) {
+				insertinto = path.get(pathindex);
+				insertindex = pathIndices.get(pathindex);
+				rv = insertinto.insert(topush, insertindex, left, right);
+				if (rv == null) {
+					// Nothing to push up
+					return;
+				}
+				topush = rv.entry(0);
+				left = rv.subtree(0);
+				right = rv.subtree(1);
+			}
+			
+			// No parent to push to
+			this.root = rv;
+		}
+		
+		// This recursive call should only happen once, ever
+		
+		if (star > range.right()) {
+			this.insert(new Interval(range.right() + 1, star), starval);
+		}
+	}
+	
+	public void insertOld(Interval range, V value) {
+		ArrayList<FigTreeNode> path = new ArrayList<FigTreeNode>();
+		ArrayList<Integer> pathIndices = new ArrayList<Integer>();
+		FigTreeNode currnode = this.root;
 		int i;
 		
 		outerloop:
-		do {
-			int numentries = currnode.numEntries();
-			for (i = 0; i < numentries; i++) {
-				FigTreeEntry current = currnode.entry(i);
-				Interval currival = current.interval();
-				if (currival.left() == range.left()) {
-					currnode.replaceEntries(i, i + 1, new FigTreeEntry(range, value));
-					return;
-				} else if (currival.left() > range.left()) {
-					path.add(currnode);
-					pathIndices.add(i);
-					currnode = currnode.subtree(i);
-					continue outerloop;
+			do {
+				int numentries = currnode.numEntries();
+				for (i = 0; i < numentries; i++) {
+					FigTreeEntry current = currnode.entry(i);
+					Interval currival = current.interval();
+					if (currival.left() == range.left()) {
+						currnode.replaceEntries(i, i + 1, new FigTreeEntry(range, value));
+						return;
+					} else if (currival.left() > range.left()) {
+						path.add(currnode);
+						pathIndices.add(i);
+						currnode = currnode.subtree(i);
+						continue outerloop;
+					}
 				}
-			}
-			path.add(currnode);
-			pathIndices.add(numentries);
-			currnode = currnode.subtree(numentries);
-		} while (currnode != null);
+				path.add(currnode);
+				pathIndices.add(numentries);
+				currnode = currnode.subtree(numentries);
+			} while (currnode != null);
 				
 		// Now we insert into a leaf and push up
 		FigTreeNode rv = null;
@@ -64,20 +155,20 @@ public class FigTree<V> {
 		FigTreeNode currnode = this.root;
 		
 		outerloop:
-		do {
-			int numentries = currnode.numEntries();
-			for (int i = 0; i < numentries; i++) {
-				FigTreeEntry current = currnode.entry(i);
-				Interval currival = current.interval();
-				if (currival.contains(location)) {
-					return current.value();
-				} else if (currival.left() > location) {
-					currnode = currnode.subtree(i);
-					continue outerloop;
+			do {
+				int numentries = currnode.numEntries();
+				for (int i = 0; i < numentries; i++) {
+					FigTreeEntry current = currnode.entry(i);
+					Interval currival = current.interval();
+					if (currival.contains(location)) {
+						return current.value();
+					} else if (currival.left() > location) {
+						currnode = currnode.subtree(i);
+						continue outerloop;
+					}
 				}
-			}
-			currnode = currnode.subtree(numentries);
-		} while (currnode != null);
+				currnode = currnode.subtree(numentries);
+			} while (currnode != null);
 		
 		return null;
 	}
@@ -112,25 +203,25 @@ public class FigTree<V> {
 		FigTreeIterState rs = new FigTreeIterState(this.root, initvalid, null);
 
 		outerloop:
-		do {
-			Interval previval;
-			Interval currival = new Interval(Integer.MIN_VALUE, Integer.MIN_VALUE);
-			while (rs.entryiter.hasNext()) {
-				rs.entry = rs.entryiter.next();
-				previval = currival;
-				currival = rs.entry.interval();
-				if (currival.contains(start)) {
-					break outerloop;
-				} else if (currival.rightOf(start)) {
-					rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(previval.right(), currival.left()), rs);
-					continue outerloop;
+			do {
+				Interval previval;
+				Interval currival = new Interval(Integer.MIN_VALUE, Integer.MIN_VALUE);
+				while (rs.entryiter.hasNext()) {
+					rs.entry = rs.entryiter.next();
+					previval = currival;
+					currival = rs.entry.interval();
+					if (currival.contains(start)) {
+						break outerloop;
+					} else if (currival.rightOf(start)) {
+						rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(previval.right(), currival.left()), rs);
+						continue outerloop;
+					}
+					rs.subtreeiter.next();
 				}
-				rs.subtreeiter.next();
-			}
-			// So we know what to do when we traverse the subtree and come back here
-			rs.entry = null;
-			rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(currival.right(), Integer.MAX_VALUE), rs);
-		} while (rs.node != null);
+				// So we know what to do when we traverse the subtree and come back here
+				rs.entry = null;
+				rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(currival.right(), Integer.MAX_VALUE), rs);
+			} while (rs.node != null);
 		
 		if (rs.node == null) {
 			/* Didn't find the exact starting byte.
@@ -148,78 +239,78 @@ public class FigTree<V> {
 				V rv = null;
 				
 				notatend:
-				if (rs != null) {
-					/* rs === null  when we reach the end of the file; we backtrack past
-					 * the root and the readstate becomes null.
-					 */
-					if (rs.entry.interval().leftOf(position) || rs.valid.leftOf(position)) {
-						/* First, descend a subtree until we reach a leaf. */
-						
-						/* Skip remaining entries if we've moved past the right of the valid interval. */
-						if (!rs.entry.interval().rightOf(rs.valid) &&
-								!rs.valid.rightOverlaps(rs.entry.interval())) {
-							int leftlimit, rightlimit;
-							FigTreeNode subtree;
-							
-							// Mark the entry to come back to after iterating over the subtree
-							leftlimit = rs.entry.interval().right();
-							if (rs.entryiter.hasNext()) {
-								rs.entry = rs.entryiter.next();
-								rightlimit = rs.entry.interval().left();
-							} else {
-								rs.entry = null;
-								rightlimit = Integer.MAX_VALUE;
-							}
-							
-							subtree = rs.subtreeiter.next();
-							descendloop:
-							while (subtree != null) {
-								rs = new FigTreeIterState(subtree, rs.valid.restrict(leftlimit, rightlimit), rs);
-								leftlimit = Integer.MIN_VALUE;
-								if (rs.entryiter.hasNext()) {
-									// So that we know to process it when we come back up here
-									rs.entry = rs.entryiter.next();
-								}
-								
-								/* Skip entries to the left of the valid interval. */
-								while (rs.entry != null && rs.entry.interval().leftOf(rs.valid)) {
-									if (rs.entryiter.hasNext()) {
-										rs.entry = rs.entryiter.next();
-									} else {
-										rs.entry = null;
-									}
-									rs.subtreeiter.next();
-								}
-								
-								if (rs.entry == null) {
-									rightlimit = Integer.MAX_VALUE;
-								} else {
-									/* If the entry overlaps partially with the interval, then
-									 * we can skip the left subtree.
-									 */
-									if (rs.valid.leftOverlaps(rs.entry.interval())) {
-										// Skip iterating over this subtree
-										rs.subtreeiter.next();
-										break descendloop;
-									}
-									rightlimit = rs.entry.interval().left();
-								}
-								subtree = rs.subtreeiter.next();
-							}
-						}
-						
-						/* If there was really no subtree (meaning we ended up at the same
-						 * node where we started), or the subtree is empty, backtrack up
-						 * the tree.
+					if (rs != null) {
+						/* rs === null  when we reach the end of the file; we backtrack past
+						 * the root and the readstate becomes null.
 						 */
-						while (rs.entry == null) {
-							rs = rs.pathprev;
-							// If we go past the end of the tree, return null for the unmapped bytes
-							if (rs == null) {
-								break notatend;
+						if (rs.entry.interval().leftOf(position) || rs.valid.leftOf(position)) {
+							/* First, descend a subtree until we reach a leaf. */
+							
+							/* Skip remaining entries if we've moved past the right of the valid interval. */
+							if (!rs.entry.interval().rightOf(rs.valid) &&
+									!rs.valid.rightOverlaps(rs.entry.interval())) {
+								int leftlimit, rightlimit;
+								FigTreeNode subtree;
+								
+								// Mark the entry to come back to after iterating over the subtree
+								leftlimit = rs.entry.interval().right();
+								if (rs.entryiter.hasNext()) {
+									rs.entry = rs.entryiter.next();
+									rightlimit = rs.entry.interval().left();
+								} else {
+									rs.entry = null;
+									rightlimit = Integer.MAX_VALUE;
+								}
+								
+								subtree = rs.subtreeiter.next();
+								descendloop:
+									while (subtree != null) {
+										rs = new FigTreeIterState(subtree, rs.valid.restrict(leftlimit, rightlimit), rs);
+										leftlimit = Integer.MIN_VALUE;
+										if (rs.entryiter.hasNext()) {
+											// So that we know to process it when we come back up here
+											rs.entry = rs.entryiter.next();
+										}
+										
+										/* Skip entries to the left of the valid interval. */
+										while (rs.entry != null && rs.entry.interval().leftOf(rs.valid)) {
+											if (rs.entryiter.hasNext()) {
+												rs.entry = rs.entryiter.next();
+											} else {
+												rs.entry = null;
+											}
+											rs.subtreeiter.next();
+										}
+										
+										if (rs.entry == null) {
+											rightlimit = Integer.MAX_VALUE;
+										} else {
+											/* If the entry overlaps partially with the interval, then
+											 * we can skip the left subtree.
+											 */
+											if (rs.valid.leftOverlaps(rs.entry.interval())) {
+												// Skip iterating over this subtree
+												rs.subtreeiter.next();
+												break descendloop;
+											}
+											rightlimit = rs.entry.interval().left();
+										}
+										subtree = rs.subtreeiter.next();
+									}
+							}
+							
+							/* If there was really no subtree (meaning we ended up at the same
+							 * node where we started), or the subtree is empty, backtrack up
+							 * the tree.
+							 */
+							while (rs.entry == null) {
+								rs = rs.pathprev;
+								// If we go past the end of the tree, return null for the unmapped bytes
+								if (rs == null) {
+									break notatend;
+								}
 							}
 						}
-					}
 					if (rs.entry.interval().contains(this.position)) {
 						rv = this.rs.entry.value();
 					}

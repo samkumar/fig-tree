@@ -26,6 +26,7 @@ public class Test {
 			}
 		}
 		
+		
 		Integer z = f.lookup(1000);
 		if (z != null) {
 			System.out.println("Bad lookup");
