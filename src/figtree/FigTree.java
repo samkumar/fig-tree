@@ -299,7 +299,7 @@ public class FigTree<V> {
 													rs.subtreeiter.next();
 													break descendloop;
 												}
-												rightlimit = rs.entry.interval().left();
+												rightlimit = rs.entry.interval().left() - 1;
 											}
 											subtree = rs.subtreeiter.next();
 										}
