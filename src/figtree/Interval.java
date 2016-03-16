@@ -19,7 +19,7 @@ public class Interval {
 	}
 	
 	public boolean contains(Interval other) {
-		return this.left <= other.left && this.right >= other.left;
+		return this.left <= other.left && this.right >= other.right;
 	}
 	
 	public Interval restrict(Interval to) {

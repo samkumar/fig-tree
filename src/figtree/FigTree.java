@@ -15,7 +15,7 @@ public class FigTree<V> {
 		FigTreeNode currnode = this.root;
 		
 		Interval valid = new Interval(Integer.MIN_VALUE, Integer.MAX_VALUE);
-		
+				
 		/* We insert two intervals: range, and [range.right() + 1, star]. */
 		int star = range.right();
 		V starval = null;
@@ -28,7 +28,6 @@ public class FigTree<V> {
 				FigTreeEntry previous;
 				FigTreeEntry current = null;
 				Interval currival = null;
-				Interval previval;
 				for (i = 0; i < numentries; i++) {
 					previous = current;
 					current = currnode.entry(i);
@@ -36,13 +35,13 @@ public class FigTree<V> {
 					if (currival.leftOverlaps(range)) {
 						// We need to replace all entries like this with a single entry for "range"
 						int j;
-						previval = currival;
-						for (j = i + 1; j < numentries && (currival = currnode.entry(j).interval()).leftOverlaps(range); j++) {
-							previval = currival;
+						previous = current;
+						for (j = i + 1; j < numentries && (current = currnode.entry(j)).interval().leftOverlaps(range); j++) {
+							previous = current;
 						}
-						if (previval.right() > star) {
-							star = previval.right();
-							starval = current.value();
+						if (previous.interval().right() > star) {
+							star = previous.interval().right();
+							starval = previous.value();
 						}
 						currnode.replaceEntries(i, j, new FigTreeEntry(range, value));
 						break outerloop;
@@ -58,14 +57,14 @@ public class FigTree<V> {
 						path.add(currnode);
 						pathIndices.add(i);
 						currnode = currnode.subtree(i);
-						valid = valid.restrict(previous == null ? Integer.MIN_VALUE : previous.interval().right(), currival.left());
+						valid = valid.restrict(previous == null ? Integer.MIN_VALUE : previous.interval().right() + 1, currival.left() - 1);
 						continue outerloop;
 					}
 				}
 				path.add(currnode);
 				pathIndices.add(numentries);
 				currnode = currnode.subtree(numentries);
-				valid = valid.restrict(currival == null ? Integer.MIN_VALUE : currival.right(), Integer.MAX_VALUE);
+				valid = valid.restrict(currival == null ? Integer.MIN_VALUE : currival.right() + 1, Integer.MAX_VALUE);
 			} while (currnode != null);
 		
 		if (currnode == null) {
@@ -213,14 +212,15 @@ public class FigTree<V> {
 					if (currival.contains(start)) {
 						break outerloop;
 					} else if (currival.rightOf(start)) {
-						rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(previval.right(), currival.left()), rs);
+						// We won't run into a case where previval and currival are adjacent
+						rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(previval.right() + 1, currival.left() - 1), rs);
 						continue outerloop;
 					}
 					rs.subtreeiter.next();
 				}
 				// So we know what to do when we traverse the subtree and come back here
 				rs.entry = null;
-				rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(currival.right(), Integer.MAX_VALUE), rs);
+				rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(currival.right() + 1, Integer.MAX_VALUE), rs);
 			} while (rs.node != null);
 		
 		if (rs.node == null) {
@@ -253,50 +253,54 @@ public class FigTree<V> {
 								FigTreeNode subtree;
 								
 								// Mark the entry to come back to after iterating over the subtree
-								leftlimit = rs.entry.interval().right();
+								leftlimit = rs.entry.interval().right() + 1;
 								if (rs.entryiter.hasNext()) {
 									rs.entry = rs.entryiter.next();
-									rightlimit = rs.entry.interval().left();
+									rightlimit = rs.entry.interval().left() - 1;
 								} else {
 									rs.entry = null;
 									rightlimit = Integer.MAX_VALUE;
 								}
 								
 								subtree = rs.subtreeiter.next();
-								descendloop:
-									while (subtree != null) {
-										rs = new FigTreeIterState(subtree, rs.valid.restrict(leftlimit, rightlimit), rs);
-										leftlimit = Integer.MIN_VALUE;
-										if (rs.entryiter.hasNext()) {
-											// So that we know to process it when we come back up here
-											rs.entry = rs.entryiter.next();
-										}
-										
-										/* Skip entries to the left of the valid interval. */
-										while (rs.entry != null && rs.entry.interval().leftOf(rs.valid)) {
+								
+								/* If rs.entry is adjacent to what it used to be, there's no point in traversing this subtree. */
+								if (leftlimit <= rightlimit) {
+									descendloop:
+										while (subtree != null) {
+											rs = new FigTreeIterState(subtree, rs.valid.restrict(leftlimit, rightlimit), rs);
+											leftlimit = Integer.MIN_VALUE;
 											if (rs.entryiter.hasNext()) {
+												// So that we know to process it when we come back up here
 												rs.entry = rs.entryiter.next();
-											} else {
-												rs.entry = null;
 											}
-											rs.subtreeiter.next();
-										}
-										
-										if (rs.entry == null) {
-											rightlimit = Integer.MAX_VALUE;
-										} else {
-											/* If the entry overlaps partially with the interval, then
-											 * we can skip the left subtree.
-											 */
-											if (rs.valid.leftOverlaps(rs.entry.interval())) {
-												// Skip iterating over this subtree
+											
+											/* Skip entries to the left of the valid interval. */
+											while (rs.entry != null && rs.entry.interval().leftOf(rs.valid)) {
+												if (rs.entryiter.hasNext()) {
+													rs.entry = rs.entryiter.next();
+												} else {
+													rs.entry = null;
+												}
 												rs.subtreeiter.next();
-												break descendloop;
 											}
-											rightlimit = rs.entry.interval().left();
+											
+											if (rs.entry == null) {
+												rightlimit = Integer.MAX_VALUE;
+											} else {
+												/* If the entry overlaps partially with the interval, then
+												 * we can skip the left subtree.
+												 */
+												if (rs.valid.leftOverlaps(rs.entry.interval())) {
+													// Skip iterating over this subtree
+													rs.subtreeiter.next();
+													break descendloop;
+												}
+												rightlimit = rs.entry.interval().left();
+											}
+											subtree = rs.subtreeiter.next();
 										}
-										subtree = rs.subtreeiter.next();
-									}
+								}
 							}
 							
 							/* If there was really no subtree (meaning we ended up at the same
@@ -364,20 +368,26 @@ public class FigTree<V> {
 	
 	private class FigTreeNode {
 		public FigTreeNode(int height) {
-			assert height >= 0;
+			if (height < 0) {
+				throw new IllegalStateException();
+			}
 			
+			this.HEIGHT = height;
+			
+			this.clear();
+		}
+		
+		public void clear() {
 			this.entries = new ArrayList<FigTreeEntry>();
 			this.subtrees = new ArrayList<FigTreeNode>();
 			
 			FigTreeNode firstchild;
-			if (height == 0) {
+			if (this.HEIGHT == 0) {
 				firstchild = null;
 			} else {
-				firstchild = new FigTreeNode(height - 1);
+				firstchild = new FigTreeNode(this.HEIGHT - 1);
 			}
 			this.subtrees.add(firstchild);
-			
-			this.HEIGHT = height;
 		}
 		
 		/**
@@ -455,15 +465,21 @@ public class FigTree<V> {
 		public void pruneTo(Interval valid) {
 			Iterator<FigTreeEntry> entryiter = this.entries.iterator();
 			Iterator<FigTreeNode> subtreeiter = this.subtrees.iterator();
+			FigTreeEntry entry;
+			FigTreeNode subtree;
 			Interval entryint = null;
+			
+			if (this.subtrees.size() != this.entries.size() + 1) {
+				throw new IllegalStateException();
+			}
 			
 			// Drop all entries to the left of VALID, along with left subtrees
 			if (!entryiter.hasNext()) {
 				return;
 			}
 			
-			entryint = entryiter.next().interval();
-			subtreeiter.next();
+			entryint = (entry = entryiter.next()).interval();
+			subtree = subtreeiter.next();
 			while (entryint.leftOf(valid)) {
 				entryiter.remove();
 				subtreeiter.remove();
@@ -471,26 +487,31 @@ public class FigTree<V> {
 				if (!entryiter.hasNext()) {
 					return;
 				}
-				entryint = entryiter.next().interval();
-				subtreeiter.next();
+				entryint = (entry = entryiter.next()).interval();
+				subtree = subtreeiter.next();
 			}
 			
 			if (valid.leftOverlaps(entryint)) {
-				subtreeiter.remove();
+				if (subtree != null) {
+					subtree.clear();
+				}
+				
+				// In case the valid boundary is in the middle of this interval
+				entry.setInterval(entryint.restrict(valid));
 				
 				if (!entryiter.hasNext()) {
 					return;
 				}
-				entryint = entryiter.next().interval();
-				subtreeiter.next();
+				entryint = (entry = entryiter.next()).interval();
+				subtree = subtreeiter.next();
 			}
 			
 			while (valid.contains(entryint)) {
 				if (!entryiter.hasNext()) {
 					return;
 				}
-				entryint = entryiter.next().interval();
-				subtreeiter.next();
+				entryint = (entry = entryiter.next()).interval();
+				subtree = subtreeiter.next();
 			}
 			
 			/* At this point, entryint is either overlapping with the right edge of
@@ -499,16 +520,21 @@ public class FigTree<V> {
 			 * skip over it. After this, subtreeiter.next() is the right subtree of
 			 * entryiter.next().
 			 */
-			subtreeiter.next();
+			subtree = subtreeiter.next();
 			
 			if (valid.rightOverlaps(entryint)) {
-				subtreeiter.remove();
+				if (subtree != null) {
+					subtree.clear();
+				}
+				
+				// In case the valid boundary is in the middle of this interval
+				entry.setInterval(entryint.restrict(valid));
 				
 				if (!entryiter.hasNext()) {
 					return;
 				}
-				entryint = entryiter.next().interval();
-				subtreeiter.next();
+				entryint = (entry = entryiter.next()).interval();
+				subtree = subtreeiter.next();
 			}
 			
 			while (entryint.rightOf(valid)) {
@@ -518,8 +544,8 @@ public class FigTree<V> {
 				if (!entryiter.hasNext()) {
 					return;
 				}
-				entryint = entryiter.next().interval();
-				subtreeiter.next();
+				entryint = entryiter.next().interval(); // don't need to assign to entry
+				subtreeiter.next(); // don't need to assign to subtree, since henceforth we only need to remove, not clear
 			}
 		}
 		
@@ -605,6 +631,9 @@ public class FigTree<V> {
 		}
 		
 		public int numEntries() {
+			if (entries.size() + 1 != subtrees.size()) {
+				throw new IllegalStateException();
+			}
 			return entries.size();
 		}
 		

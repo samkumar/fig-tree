@@ -1,6 +1,7 @@
 import figtree.*;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Random;
 public class Test {
 
 	public static void main(String[] args) {
@@ -39,16 +40,23 @@ public class Test {
 		FigTree<Integer> f2 = new FigTree<Integer>(3);
 		HashMap<Integer, Integer> rands = new HashMap<Integer, Integer>();
 		final int NUM_INSERTS = 1000;
+		Random rand = new Random(42);
 		for (int k = 0; k < NUM_INSERTS; k++) {
-			int rand1 = (int) (Math.random() * NUM_INSERTS);
-			int rand2 = (int) (Math.random() * NUM_INSERTS);
-			f2.insert(new Interval(rand1, rand1), rand2);
+			int rand1 = rand.nextInt(NUM_INSERTS);
+			int rand2 = rand.nextInt(NUM_INSERTS);
+			f2.insert(new Interval(rand1, rand1 + 1), rand2);
 			rands.put(rand1, rand2);
+			rands.put(rand1 + 1, rand2);
 			for (int m = 0; m < NUM_INSERTS; m++) {
 				Integer r = f2.lookup(m);
 				Integer ans = rands.get(m);
 				if (((r == null) != (ans == null)) || (r != null && !r.equals(ans))) {
 					System.out.println("Bad lookup");
+					System.out.println(f2);
+					System.out.println(m);
+					System.out.println(ans);
+					System.out.println(r);
+					return;
 				}
 			}
 		}
@@ -62,7 +70,7 @@ public class Test {
 			Integer iterval = range.next();
 			Integer correct = rands.get(y);
 			if (((iterval == null) != (correct == null)) || (iterval != null && !iterval.equals(correct))) {
-				System.out.printf("Bad iteration: %d\n", y);
+				System.out.printf("Bad iteration: %d: %s != %s\n", y, iterval, correct);
 			}
 		}
 		if (range.hasNext()) {
