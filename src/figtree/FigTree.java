@@ -247,15 +247,15 @@ public class FigTree<V> {
 							/* First, descend a subtree until we reach a leaf. */
 							
 							/* Skip remaining entries if we've moved past the right of the valid interval. */
-							if (!rs.entry.interval().rightOf(rs.valid) &&
-									!rs.valid.rightOverlaps(rs.entry.interval())) {
+							if (rs.valid.rightOverlaps(rs.entry.interval())) {
+								rs.entry = null;
+							} else {
 								int leftlimit, rightlimit;
 								FigTreeNode subtree;
 								
 								// Mark the entry to come back to after iterating over the subtree
 								leftlimit = rs.entry.interval().right() + 1;
-								if (rs.entryiter.hasNext()) {
-									rs.entry = rs.entryiter.next();
+								if (rs.entryiter.hasNext() && !(rs.entry = rs.entryiter.next()).interval().rightOf(rs.valid)) {
 									rightlimit = rs.entry.interval().left() - 1;
 								} else {
 									rs.entry = null;
@@ -273,6 +273,9 @@ public class FigTree<V> {
 											if (rs.entryiter.hasNext()) {
 												// So that we know to process it when we come back up here
 												rs.entry = rs.entryiter.next();
+												if (rs.entry.interval().rightOf(rs.valid)) {
+													rs.entry = null;
+												}
 											}
 											
 											/* Skip entries to the left of the valid interval. */
