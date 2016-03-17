@@ -9,94 +9,147 @@ public class FigTree<V> {
 		this.SPLITLIMIT = 1 + (order << 1);
 	}
 	
-	public void insert(Interval range, V value) {
-		ArrayList<FigTreeNode> path = new ArrayList<FigTreeNode>();
-		ArrayList<Integer> pathIndices = new ArrayList<Integer>();
-		FigTreeNode currnode = this.root;
+	private class InsertArgs {
+		public InsertArgs(Interval range, V value) {
+			this(range, value, new ArrayList<FigTreeNode>(), new ArrayList<Integer>(),
+					FigTree.this.root, new Interval(Integer.MIN_VALUE, Integer.MAX_VALUE));
+		}
+		public InsertArgs(Interval range, V value, ArrayList<FigTreeNode> path,
+				ArrayList<Integer> pathIndices, FigTreeNode at, Interval valid) {
+			this.range = range;
+			this.value = value;
+			this.path = path;
+			this.pathIndices = pathIndices;
+			this.at = at;
+			this.valid = valid;
+		}
+		public Interval range;
+		public V value;
+		public ArrayList<FigTreeNode> path;
+		public ArrayList<Integer> pathIndices;
+		public FigTreeNode at;
+		public Interval valid;
+	}
+	
+	public void write(Interval range, V value) {
+		// Insert the primary group [a, b]
+		InsertArgs starinsert = this.insert(new InsertArgs(range, value));
 		
-		Interval valid = new Interval(Integer.MIN_VALUE, Integer.MAX_VALUE);
-				
-		/* We insert two intervals: range, and [range.right() + 1, star]. */
-		int star = range.right();
-		V starval = null;
+		if (starinsert != null) {
+			// Insert the residual group [b + 1, star], if any
+			starinsert = this.insert(starinsert);
+			
+			if (starinsert != null) {
+				// We should have at most one residual group!
+				throw new IllegalStateException("Multiple star inserts");
+			}
+		}
+	}
+	
+	private InsertArgs insert(InsertArgs args) {
+		Interval range = args.range;
+		V value = args.value;
+		ArrayList<FigTreeNode> path = args.path;
+		ArrayList<Integer> pathIndices = args.pathIndices;
+		FigTreeNode currnode = args.at;
+		Interval valid = args.valid;
+		
+		if (value == null) {
+			throw new IllegalArgumentException("can't insert null value");
+		}
+		
+		// System.out.printf("insert %s into %s, valid = %s\n", args.range, args.at, args.valid);
+		
+		/* Record the residual group [range.right() + 1, star]. */
+		InsertArgs continuation = null;
 		int numentries, i;
 		
 		outerloop:
-			do {
+			while (currnode != null) {
 				currnode.pruneTo(valid);
 				numentries = currnode.numEntries();
-				FigTreeEntry previous;
 				FigTreeEntry current = null;
+				Interval previval;
 				Interval currival = null;
 				for (i = 0; i < numentries; i++) {
-					previous = current;
+					previval = currival;
 					current = currnode.entry(i);
 					currival = current.interval();
 					if (currival.leftOverlaps(range)) {
 						// We need to replace all entries like this with a single entry for "range"
 						int j;
-						previous = current;
+						FigTreeEntry previous = current;
 						for (j = i + 1; j < numentries && (current = currnode.entry(j)).interval().leftOverlaps(range); j++) {
 							previous = current;
 						}
-						if (previous.interval().right() > star) {
-							star = previous.interval().right();
-							starval = previous.value();
-						}
 						currnode.replaceEntries(i, j, new FigTreeEntry(range, value));
+						if (previous.interval().right() > range.right()) {
+							// Get the value of star and store the next insert in a continuation
+							if (continuation != null) {
+								throw new IllegalStateException("Duplicate continuation set");
+							}
+							path.add(currnode);
+							pathIndices.add(i + 1);
+							continuation = new InsertArgs(new Interval(range.right() + 1, previous.interval().right()),
+									previous.value(), path, pathIndices, currnode.subtree(i + 1),
+									valid.restrict(previous.interval().right() + 1, j == numentries ? Integer.MAX_VALUE : current.interval().left() - 1, true));
+						}
 						break outerloop;
 					} else if (range.leftOverlaps(currival)) {
 						// Adjust this range and keep going (this can only possibly happen for one node)
-						if (currival.right() > star) {
-							star = currival.right();
-							starval = current.value();
+						if (currival.right() > range.right()) {
+							// In this case, we get star from here
+							if (continuation != null) {
+								throw new IllegalStateException("Duplicate continutation set");
+							}
+							continuation = new InsertArgs(new Interval(range.right() + 1, currival.right()), current.value());
 						}
-						currival = new Interval(currival.left(), range.left() - 1);
-						current.setInterval(currival);
+						// DON'T UPDATE currival with the new interval; we need the old interval to prune the next node correctly
+						current.setInterval(new Interval(currival.left(), range.left() - 1));
 					} else if (currival.rightOf(range)) {
 						path.add(currnode);
 						pathIndices.add(i);
 						currnode = currnode.subtree(i);
-						valid = valid.restrict(previous == null ? Integer.MIN_VALUE : previous.interval().right() + 1, currival.left() - 1);
+						/* What if previval and currival are adjacent intervals? Then the entire subtree can be
+						 * pruned. This is represented by the special empty interval.
+						 */
+						valid = valid.restrict(previval == null ? Integer.MIN_VALUE : previval.right() + 1, currival.left() - 1, true);
 						continue outerloop;
 					}
 				}
 				path.add(currnode);
 				pathIndices.add(numentries);
 				currnode = currnode.subtree(numentries);
-				valid = valid.restrict(currival == null ? Integer.MIN_VALUE : currival.right() + 1, Integer.MAX_VALUE);
-			} while (currnode != null);
-		
-		if (currnode == null) {
-			// In this case, we actually need to do an insertion...
-			FigTreeNode rv = null;
-			FigTreeEntry topush = new FigTreeEntry(range, value);
-			FigTreeNode left = null;
-			FigTreeNode right = null;
-			FigTreeNode insertinto;
-			int insertindex;
-			for (int pathindex = path.size() - 1; pathindex >= 0; pathindex--) {
-				insertinto = path.get(pathindex);
-				insertindex = pathIndices.get(pathindex);
-				rv = insertinto.insert(topush, insertindex, left, right);
-				if (rv == null) {
-					// Nothing to push up
-					return;
-				}
-				topush = rv.entry(0);
-				left = rv.subtree(0);
-				right = rv.subtree(1);
+				valid = valid.restrict(currival == null ? Integer.MIN_VALUE : currival.right() + 1, Integer.MAX_VALUE, true);
 			}
-			
-			// No parent to push to
-			this.root = rv;
-		}
 		
-		// This recursive call should only happen once, ever
+		treeinsertion:
+			if (currnode == null) {
+				// In this case, we actually need to do an insertion...
+				FigTreeNode rv = null;
+				FigTreeEntry topush = new FigTreeEntry(range, value);
+				FigTreeNode left = null;
+				FigTreeNode right = null;
+				FigTreeNode insertinto;
+				int insertindex;
+				for (int pathindex = path.size() - 1; pathindex >= 0; pathindex--) {
+					insertinto = path.get(pathindex);
+					insertindex = pathIndices.get(pathindex);
+					rv = insertinto.insert(topush, insertindex, left, right);
+					if (rv == null) {
+						// Nothing to push up
+						break treeinsertion;
+					}
+					topush = rv.entry(0);
+					left = rv.subtree(0);
+					right = rv.subtree(1);
+				}
+				
+				// No parent to push to
+				this.root = rv;
+			}
 		
-		if (star > range.right()) {
-			this.insert(new Interval(range.right() + 1, star), starval);
-		}
+		return continuation;
 	}
 	
 	public void insertOld(Interval range, V value) {
@@ -394,21 +447,6 @@ public class FigTree<V> {
 		}
 		
 		/**
-		 * Inserts an entry into this node, and returns the entry to be pushed up to the parent.
-		 * @param newent The entry to be inserted.
-		 * @param leftChild The new left child of the inserted entry (or null if this is a leaf).
-		 * @param rightChild The new right child of the inserted entry (or null if this is a leaf).
-		 * @return The entry to be pushed up to the parent, as a node with two children, or null if no node is pushed up.
-		 */
-		public FigTreeNode insert(FigTreeEntry newent, FigTreeNode leftChild, FigTreeNode rightChild) {
-			int index = -Collections.<FigTreeEntry>binarySearch(this.entries, newent);
-			if (index < 0) {
-				throw new IllegalArgumentException("Insert()ing an interval that already exists");
-			}
-			return this.insert(newent, index, leftChild, rightChild);
-		}
-		
-		/**
 		 * Inserts an entry into this node, and returns the entry to be pushed up to the parent,
 		 * given the index at which to insert the entry.
 		 * @param index The index at which to insert the entry.
@@ -419,7 +457,7 @@ public class FigTree<V> {
 		public FigTreeNode insert(FigTreeEntry newent, int index, FigTreeNode leftChild, FigTreeNode rightChild) {
 			if ((index != 0 && newent.overlaps(this.entries.get(index - 1)))
 					|| (index != entries.size() && newent.overlaps(this.entries.get(index)))) {
-				throw new IllegalStateException("Insert() violates no-overlap invariant");
+				throw new IllegalStateException("Insert() violates no-overlap invariant: " + newent + " " + this);
 			}
 			entries.add(index, newent);
 			subtrees.set(index, leftChild);
@@ -472,8 +510,9 @@ public class FigTree<V> {
 			FigTreeNode subtree;
 			Interval entryint = null;
 			
-			if (this.subtrees.size() != this.entries.size() + 1) {
-				throw new IllegalStateException();
+			if (valid == Interval.EMPTY) {
+				this.clear();
+				return;
 			}
 			
 			// Drop all entries to the left of VALID, along with left subtrees
@@ -552,71 +591,6 @@ public class FigTree<V> {
 			}
 		}
 		
-		/**
-		 * Invalidates a left portion of this node, given a cached interval in an ancestor.
-		 * @param invalid A cached interval in an ancestor of this node.
-		 */
-		public void invalidateLeft(Interval invalid) {
-			Iterator<FigTreeEntry> entryiter = this.entries.iterator();
-			FigTreeEntry e = null;
-			Interval entryint = null;
-			int i = 0;
-			while (entryiter.hasNext()) {
-				e = entryiter.next();
-				entryint = e.interval();
-				if (invalid.contains(entryint)) {
-					i++;
-				} else {
-					break;
-				}
-			}
-			if (e == null) {
-				// No entries in this node
-				return;
-			}
-			boolean hasNext = entryiter.hasNext();
-			this.entries.subList(0, i).clear();
-			if (hasNext && invalid.overlaps(entryint)) {
-				entryint = new Interval(invalid.right() + 1, entryint.right());
-				e.setInterval(entryint);
-				i++;
-			}
-			this.subtrees.subList(0, i).clear();
-		}
-		
-		/**
-		 * Invalidates a right portion of this node, given a cached interval in an ancestor.
-		 * @param invalid A cached interval in an ancestor of this node.
-		 */
-		public void invalidateRight(Interval invalid) {
-			int numentries = this.entries.size();
-			ListIterator<FigTreeEntry> entryiter = this.entries.listIterator(numentries);
-			FigTreeEntry e = null;
-			Interval entryint = null;
-			int i = numentries;
-			while (entryiter.hasPrevious()) {
-				e = entryiter.previous();
-				entryint = e.interval();
-				if (invalid.contains(entryint)) {
-					i--;
-				} else {
-					break;
-				}
-			}
-			if (e == null) {
-				// No entries in this node
-				return;
-			}
-			boolean hasPrevious = entryiter.hasPrevious();
-			this.entries.subList(i, numentries).clear();
-			if (hasPrevious && invalid.overlaps(entryint)) {
-				entryint = new Interval(entryint.left(), invalid.left() + 1);
-				e.setInterval(entryint);
-				i--;
-			}
-			this.subtrees.subList(i, numentries).clear();
-		}
-		
 		public Iterator<FigTreeEntry> entryIter() {
 			return Collections.unmodifiableList(this.entries).iterator();
 		}
@@ -638,10 +612,6 @@ public class FigTree<V> {
 				throw new IllegalStateException();
 			}
 			return entries.size();
-		}
-		
-		public boolean isLeaf() {
-			return this.HEIGHT == 0;
 		}
 		
 		public String toString() {

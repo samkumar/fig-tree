@@ -12,7 +12,7 @@ public class Test {
 		
 		for (int j = 1; j <= 19; j++) {
 			int x = j << 1;
-			f.insert(new Interval(x, x), x);
+			f.write(new Interval(x, x), x);
 			for (int y = 1; y <= x; y++) {
 				Integer v = f.lookup(y);
 				if ((y & 0x1) == 0) {
@@ -33,7 +33,7 @@ public class Test {
 			System.out.println("Bad lookup");
 		}
 		
-		f.insert(new Interval(4, 4), 5);
+		f.write(new Interval(4, 4), 5);
 		System.out.println(f);
 		System.out.println(f.lookup(4));
 		
@@ -44,9 +44,18 @@ public class Test {
 		for (int k = 0; k < NUM_INSERTS; k++) {
 			int rand1 = rand.nextInt(NUM_INSERTS);
 			int rand2 = rand.nextInt(NUM_INSERTS);
-			f2.insert(new Interval(rand1, rand1 + 1), rand2);
-			rands.put(rand1, rand2);
-			rands.put(rand1 + 1, rand2);
+			int rand3 = rand.nextInt(NUM_INSERTS);
+			if (rand1 > rand2) {
+				int temp = rand1;
+				rand1 = rand2;
+				rand2 = temp;
+			}
+			//System.out.println(f2);
+			//System.out.printf("Inserting [%d, %d]: %d\n", rand1, rand2, rand3);
+			f2.write(new Interval(rand1, rand2), rand3);
+			for (int r = rand1; r <= rand2; r++) {
+				rands.put(r, rand3);
+			}
 			for (int m = 0; m < NUM_INSERTS; m++) {
 				Integer r = f2.lookup(m);
 				Integer ans = rands.get(m);

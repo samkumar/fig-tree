@@ -22,12 +22,26 @@ public class Interval {
 		return this.left <= other.left && this.right >= other.right;
 	}
 	
+	public Interval restrict(Interval to, boolean allowempty) {
+		return this.restrict(to.left, to.right, allowempty);
+	}
+	
 	public Interval restrict(Interval to) {
-		return this.restrict(to.left, to.right);
+		return this.restrict(to, false);
+	}
+	
+	public Interval restrict(int left, int right, boolean allowempty) {
+		int newleft = Math.max(this.left, left);
+		int newright = Math.min(this.right, right);
+		if (allowempty && newleft > newright) {
+			return Interval.EMPTY;
+		} else {
+			return new Interval(newleft, newright);
+		}
 	}
 	
 	public Interval restrict(int left, int right) {
-		return new Interval(Math.max(this.left, left), Math.min(this.right, right));
+		return this.restrict(left, right, false);
 	}
 	
 	public int left() {
@@ -78,6 +92,60 @@ public class Interval {
 		return String.format("[%d, %d]", this.left, this.right);
 	}
 	
+	private static class EmptyInterval extends Interval {
+		public EmptyInterval() {
+			super(0, 0);
+		}
+		public boolean contains(int x) {
+			return false;
+		}
+		public boolean contains(Interval other) {
+			return false;
+		}
+		public Interval restrict(Interval to, boolean allowempty) {
+			return this;
+		}
+		public Interval restrict(int left, int right, boolean allowempty) {
+			return this;
+		}
+		public boolean overlaps(Interval other) {
+			return false;
+		}
+		public boolean leftOverlaps(Interval other) {
+			return false;
+		}
+		public boolean rightOverlaps(Interval other) {
+			return false;
+		}
+		public int left() {
+			return Integer.MAX_VALUE;
+		}
+		public int right() {
+			return Integer.MIN_VALUE;
+		}
+		public boolean leftOf(Interval other) {
+			return false;
+		}
+		public boolean leftOf(int x) {
+			return false;
+		}
+		public boolean rightOf(Interval other) {
+			return false;
+		}
+		public boolean rightOf(int x) {
+			return false;
+		}
+		public boolean equals(Object o) {
+			return o instanceof EmptyInterval;
+		}
+		public String toString() {
+			return "[EMPTY]";
+		}
+	}
+	
 	private int left;
 	private int right;
+	
+	// Singleton
+	public static final Interval EMPTY = new EmptyInterval();
 }
