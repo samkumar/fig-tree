@@ -74,16 +74,20 @@ public class Test {
 		System.out.println("Finished running tests");
 		
 		System.out.println("Running iterator tests");
-		Iterator<Integer> range = f2.read(0, NUM_INSERTS);
-		for (int y = 0; y < NUM_INSERTS; y++) {
-			Integer iterval = range.next();
-			Integer correct = rands.get(y);
-			if (((iterval == null) != (correct == null)) || (iterval != null && !iterval.equals(correct))) {
-				System.out.printf("Bad iteration: %d: %s != %s\n", y, iterval, correct);
+		for (int start = 0; start < NUM_INSERTS; start++) {
+			for (int end = start; end < NUM_INSERTS; end++) {
+				Iterator<Integer> range = f2.read(start, end);
+				for (int y = start; y < end; y++) {
+					Integer iterval = range.next();
+					Integer correct = rands.get(y);
+					if (((iterval == null) != (correct == null)) || (iterval != null && !iterval.equals(correct))) {
+						System.out.printf("Bad iteration: %d: %s != %s\n", y, iterval, correct);
+					}
+				}
+				if (range.hasNext()) {
+					System.out.println("Iteration did not end.");
+				}
 			}
-		}
-		if (range.hasNext()) {
-			System.out.println("Iteration did not end.");
 		}
 		System.out.println("Finished running iterator tests");
 	}
