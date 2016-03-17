@@ -263,6 +263,7 @@ public class FigTree<V> {
 					previval = currival;
 					currival = rs.entry.interval();
 					if (currival.contains(start)) {
+						rs.subtreeiter.next(); // After traversing the entry, start on the right subtree
 						break outerloop;
 					} else if (currival.rightOf(start)) {
 						// We won't run into a case where previval and currival are adjacent
