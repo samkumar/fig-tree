@@ -39,8 +39,8 @@ public class Test {
 		
 		FigTree<Integer> f2 = new FigTree<Integer>(3);
 		HashMap<Integer, Integer> rands = new HashMap<Integer, Integer>();
-		final int NUM_INSERTS = 1000;
-		Random rand = new Random(42);
+		final int NUM_INSERTS = 400;
+		Random rand = new Random(44);
 		for (int k = 0; k < NUM_INSERTS; k++) {
 			int rand1 = rand.nextInt(NUM_INSERTS);
 			int rand2 = rand.nextInt(NUM_INSERTS);
@@ -50,7 +50,7 @@ public class Test {
 				rand1 = rand2;
 				rand2 = temp;
 			}
-			System.out.printf("Inserting [%d, %d]: %d\n", rand1, rand2, rand3);
+			System.out.printf("Writing [%d, %d]: %d\n", rand1, rand2, rand3);
 			f2.write(new Interval(rand1, rand2), rand3);
 			for (int r = rand1; r <= rand2; r++) {
 				rands.put(r, rand3);
@@ -67,28 +67,28 @@ public class Test {
 					return;
 				}
 			}
-		}
-		
-		System.out.println(f2);
-		System.out.println("Finished running tests");
-		
-		System.out.println("Running iterator tests");
-		for (int start = 0; start < NUM_INSERTS; start++) {
-			for (int end = start; end < NUM_INSERTS; end++) {
-				Iterator<Integer> range = f2.read(start, end);
-				for (int y = start; y < end; y++) {
-					Integer iterval = range.next();
-					Integer correct = rands.get(y);
-					if (((iterval == null) != (correct == null)) || (iterval != null && !iterval.equals(correct))) {
-						System.out.printf("Bad iteration: %d: %s != %s\n", y, iterval, correct);
+			System.out.println(f2);
+			System.out.println("Running iterator tests");
+			for (int start = 0; start < NUM_INSERTS; start++) {
+				for (int end = start; end < NUM_INSERTS; end++) {
+					Iterator<Integer> range = f2.read(start, end);
+					//System.out.printf("Testing %d to %d\n", start, end);
+					for (int y = start; y < end; y++) {
+						Integer iterval = range.next();
+						Integer correct = rands.get(y);
+						if (((iterval == null) != (correct == null)) || (iterval != null && !iterval.equals(correct))) {
+							System.out.printf("Bad iteration: %d: %s != %s\n", y, iterval, correct);
+						}
 					}
-				}
-				if (range.hasNext()) {
-					System.out.println("Iteration did not end.");
+					if (range.hasNext()) {
+						System.out.println("Iteration did not end.");
+					}
 				}
 			}
 		}
-		System.out.println("Finished running iterator tests");
+		
+		System.out.println("Final tree");
+		System.out.println(f2);
 	}
 
 }

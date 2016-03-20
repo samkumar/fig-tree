@@ -358,12 +358,13 @@ public class FigTree<V> {
 				rs = new FigTreeIterState(rs.subtreeiter.next(), rs.valid.restrict(currival.right() + 1, Integer.MAX_VALUE), rs);
 			} while (rs.node != null);
 		
-		if (rs.node == null) {
-			/* Didn't find the exact starting byte.
-			 * So, stop at the lowest node we got to.
-			 */
+		/* If rs.entry == null (equivalently, rs.node == null), then we didn't
+		 * find the exact starting byte. So, stop at the lowest node we got to.
+		 */
+		while (rs != null && rs.entry == null) {
 			rs = rs.pathprev;
 		}
+		
 		final FigTreeIterState rsfinal = rs;
 		
 		return new Iterator<V>() {
@@ -500,6 +501,8 @@ public class FigTree<V> {
 			
 			rvbuilder.append('\n');
 		}
+		
+		rvbuilder.deleteCharAt(rvbuilder.length() - 1);
 		
 		return rvbuilder.toString();
 	}
