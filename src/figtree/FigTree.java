@@ -23,6 +23,9 @@ public class FigTree<V> {
 			this.at = at;
 			this.valid = valid;
 		}
+		public String toString() {
+			return String.format("%s: %s @ %s <- %s %s", range, value, at, path, pathIndices);
+		}
 		public Interval range;
 		public V value;
 		public ArrayList<FigTreeNode> path;
@@ -31,22 +34,32 @@ public class FigTree<V> {
 		public Interval valid;
 	}
 	
+	private class InsertContinuation {
+		public InsertArgs leftc;
+		public InsertArgs rightc;
+	}
+	
 	public void write(Interval range, V value) {
 		// Insert the primary group [a, b]
-		InsertArgs starinsert = this.insert(new InsertArgs(range, value));
+		InsertContinuation starinserts = this.insert(new InsertArgs(range, value), false);
 		
-		if (starinsert != null) {
-			// Insert the residual group [b + 1, star], if any
-			starinsert = this.insert(starinsert);
-			
-			if (starinsert != null) {
-				// We should have at most one residual group!
-				throw new IllegalStateException("Multiple star inserts");
+		// Insert the residual groups [star1, a - 1] and [b + 1, star2]
+		InsertContinuation newstarinserts;
+		if (starinserts.rightc != null) {
+			newstarinserts = this.insert(starinserts.rightc, true);
+			if (newstarinserts.leftc != null || newstarinserts.rightc != null) {
+				throw new IllegalStateException("Recursive star insert");
+			}
+		}
+		if (starinserts.leftc != null) {
+			newstarinserts = this.insert(starinserts.leftc, false);
+			if (newstarinserts.leftc != null || newstarinserts.rightc != null) {
+				throw new IllegalStateException("Recursive star insert");
 			}
 		}
 	}
 	
-	private InsertArgs insert(InsertArgs args) {
+	private InsertContinuation insert(InsertArgs args, boolean rightcontinuation) {
 		Interval range = args.range;
 		V value = args.value;
 		ArrayList<FigTreeNode> path = args.path;
@@ -54,14 +67,16 @@ public class FigTree<V> {
 		FigTreeNode currnode = args.at;
 		Interval valid = args.valid;
 		
+		int finalsharedindex = pathIndices.size() - 1;
+		
 		if (value == null) {
 			throw new IllegalArgumentException("can't insert null value");
 		}
-		
+				
 		// System.out.printf("insert %s into %s, valid = %s\n", args.range, args.at, args.valid);
 		
-		/* Record the residual group [range.right() + 1, star]. */
-		InsertArgs continuation = null;
+		/* Record the residual groups [star1, range.left() - 1] and [range.right() + 1, star2]. */
+		InsertContinuation ic = new InsertContinuation();
 		int numentries, i;
 		
 		outerloop:
@@ -75,37 +90,45 @@ public class FigTree<V> {
 					previval = currival;
 					current = currnode.entry(i);
 					currival = current.interval();
-					if (currival.leftOverlaps(range)) {
-						// We need to replace all entries like this with a single entry for "range"
+					if (currival.overlaps(range)) {
+						path.add(currnode);
+						if (currival.left() < range.left()) {
+							// Create a continuation for the left subinterval
+							ic.leftc = new InsertArgs(new Interval(currival.left(), range.left() - 1),
+									current.value(), path, pathIndices, currnode.subtree(i),
+									valid.restrict(i == 0 ? Integer.MIN_VALUE : previval.right() + 1,
+											currival.left() - 1, true));
+						}
+						/* The entry in this node immediately after current will either
+						 * be disjoint from RANGE, or will left-overlap it. It can't
+						 * right-overlap it.
+						 */
 						int j;
 						FigTreeEntry previous = current;
 						for (j = i + 1; j < numentries && (current = currnode.entry(j)).interval().leftOverlaps(range); j++) {
 							previous = current;
 						}
+						/* Now, either CURRENT is the first entry in the node that is disjoint
+						 * from RANGE, or, if there is no such entry, j == numentries.
+						 * In either case, PREVIOUS is the last entry in the node that overlaps
+						 * with RANGE.
+						 */
 						currnode.replaceEntries(i, j, new FigTreeEntry(range, value));
 						if (previous.interval().right() > range.right()) {
-							// Get the value of star and store the next insert in a continuation
-							if (continuation != null) {
-								throw new IllegalStateException("Duplicate continuation set");
-							}
-							path.add(currnode);
-							pathIndices.add(i + 1);
-							continuation = new InsertArgs(new Interval(range.right() + 1, previous.interval().right()),
+							// Create a continuation for the right subinterval
+							ic.rightc = new InsertArgs(new Interval(range.right() + 1, previous.interval().right()),
 									previous.value(), path, pathIndices, currnode.subtree(i + 1),
-									valid.restrict(previous.interval().right() + 1, j == numentries ? Integer.MAX_VALUE : current.interval().left() - 1, true));
+									valid.restrict(previous.interval().right() + 1,
+											j == numentries ? Integer.MAX_VALUE : current.interval().left() - 1, true));
+							// If there's a right continuation, then we set the path index to that of the right continuation
+							// If there's also a left continuation, then we adjust the index for the left continuation
+							pathIndices.add(i + 1); // the index of the right subtree after we do condensing
+						} else {
+							// There's no right continuation that will adjust the final shared path index for the left continuation
+							// So we need to directly insert the index for the left continuation here, in case there is a left continuation
+							pathIndices.add(i);
 						}
 						break outerloop;
-					} else if (range.leftOverlaps(currival)) {
-						// Adjust this range and keep going (this can only possibly happen for one node)
-						if (currival.right() > range.right()) {
-							// In this case, we get star from here
-							if (continuation != null) {
-								throw new IllegalStateException("Duplicate continutation set");
-							}
-							continuation = new InsertArgs(new Interval(range.right() + 1, currival.right()), current.value());
-						}
-						// DON'T UPDATE currival with the new interval; we need the old interval to prune the next node correctly
-						current.setInterval(new Interval(currival.left(), range.left() - 1));
 					} else if (currival.rightOf(range)) {
 						path.add(currnode);
 						pathIndices.add(i);
@@ -132,24 +155,82 @@ public class FigTree<V> {
 				FigTreeNode right = null;
 				FigTreeNode insertinto;
 				int insertindex;
-				for (int pathindex = path.size() - 1; pathindex >= 0; pathindex--) {
+				for (int pathindex = pathIndices.size() - 1; pathindex >= 0; pathindex--) {
 					insertinto = path.get(pathindex);
 					insertindex = pathIndices.get(pathindex);
 					rv = insertinto.insert(topush, insertindex, left, right);
+					
+					if (rightcontinuation) {
+						/*
+						 * All indices in the pathIndices and path lists at or before
+						 * FINALSHAREDINDEX are shared with the path in a left continuation
+						 * that has not yet been executed. If any nodes get split along that
+						 * path, we need to update the path accordingly.
+						 * 
+						 * Special case: we need to artificially decrement the stored insertindex
+						 * at the FINALSHAREDINDEX because the left continuation takes the left
+						 * subtree of the primary range (whereas we took the right branch).
+						 */
+						if (pathindex == finalsharedindex) {
+							pathIndices.set(pathindex, --insertindex);
+						} else if (pathindex < finalsharedindex) {
+							FigTreeNode nextpathmember = path.get(pathindex + 1);
+							if (nextpathmember == right) {
+								pathIndices.set(pathindex, ++insertindex);
+							}
+						}
+						
+						if (rv != null) {
+							/* If this node is being split, then there are some complications.
+							 * We need to change the node itself along the path.
+							 * We also need to adjust the index accordingly.
+							 */
+							if (insertindex <= FigTree.this.ORDER) {
+								path.set(pathindex, rv.subtree(0));
+							} else {
+								path.set(pathindex, rv.subtree(1));
+								pathIndices.set(pathindex, (insertindex -= (FigTree.this.ORDER + 1)));
+							}
+						}
+					}
+					
 					if (rv == null) {
 						// Nothing to push up
+						/* Edge case: If we didn't hit the case where pathindex == finalsharedindex, we need
+						 * to make sure that that entry of pathIndices got decremented anyway (so that the
+						 * left continuation works as expected).
+						 */
+						if (rightcontinuation && pathindex > finalsharedindex) {
+							pathIndices.set(finalsharedindex, pathIndices.get(finalsharedindex) - 1);
+						}
 						break treeinsertion;
 					}
 					topush = rv.entry(0);
 					left = rv.subtree(0);
 					right = rv.subtree(1);
 				}
-				
+								
 				// No parent to push to
 				this.root = rv;
+				if (rightcontinuation) {
+					FigTreeNode nextpathmember = path.get(0);
+					if (nextpathmember == rv.subtree(1)) {
+						pathIndices.add(0, 1);
+					} else {
+						if (nextpathmember != rv.subtree(0)) {
+							throw new IllegalStateException("...!");
+						}
+						pathIndices.add(0, 0);
+					}
+					path.add(0, rv);
+					finalsharedindex++;
+				}
 			}
-		
-		return continuation;
+		if (rightcontinuation) {
+			path.subList(finalsharedindex + 1, path.size()).clear();
+			pathIndices.subList(finalsharedindex + 1, pathIndices.size()).clear();
+		}
+		return ic;
 	}
 	
 	public void insertOld(Interval range, V value) {
@@ -193,7 +274,7 @@ public class FigTree<V> {
 			if (rv == null) {
 				// Nothing to push up
 				return;
-			}
+			}			
 			topush = rv.entry(0);
 			left = rv.subtree(0);
 			right = rv.subtree(1);

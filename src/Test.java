@@ -50,8 +50,7 @@ public class Test {
 				rand1 = rand2;
 				rand2 = temp;
 			}
-			//System.out.println(f2);
-			//System.out.printf("Inserting [%d, %d]: %d\n", rand1, rand2, rand3);
+			System.out.printf("Inserting [%d, %d]: %d\n", rand1, rand2, rand3);
 			f2.write(new Interval(rand1, rand2), rand3);
 			for (int r = rand1; r <= rand2; r++) {
 				rands.put(r, rand3);
