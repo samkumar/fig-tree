@@ -91,6 +91,7 @@ public class Test {
 				rand1 = rand2;
 				rand2 = temp;
 			}
+			rand2 = rand1 + (rand2 & 0x000000FF);
 			f2.write(new Interval(rand1, rand2), rand3);
 			for (int r = rand1; r <= rand2; r++) {
 				rands.put(r, rand3);
@@ -108,38 +109,42 @@ public class Test {
 				}
 			}
 			System.out.println(f2);
-			System.out.println("Running iterator tests");
+			System.out.printf("Running iterator tests %d\n", k);
 			for (int start = 0; start < NUM_INSERTS; start++) {
-				for (int end = start; end < NUM_INSERTS; end++) {
-					//System.out.printf("Reading from %d to %d\n", start, end);
-					Iterator<FigTree<Integer>.Fig> range = f2.read(start, end);
-					int y = start;
-					while (range.hasNext()) {
-						FigTree<Integer>.Fig iterval = range.next();
-						Integer correct, intree;
-						//System.out.printf("%s: %s\n", iterval.range(), iterval.value());
-						intree = iterval.value();
-						for (; iterval.range().rightOf(y); y++) {
-							correct = rands.get(y);
-							if (correct != null) {
-								System.out.printf("Bad iteration: %d: (nothing) != %s\n", y, correct);
+				for (int end = 0; end < NUM_INSERTS; end++) {
+					try {
+						Iterator<FigTree<Integer>.Fig> range = f2.read(start, end);
+						int y = start;
+						while (range.hasNext()) {
+							FigTree<Integer>.Fig iterval = range.next();
+							Integer correct, intree;
+							intree = iterval.value();
+							for (; iterval.range().rightOf(y); y++) {
+								correct = rands.get(y);
+								if (correct != null) {
+									System.out.printf("Bad iteration: %d: (nothing) != %s\n", y, correct);
+									throw new IllegalStateException();
+								}
+							}
+							for (; iterval.range().contains(y); y++) {
+								correct = rands.get(y);
+								if (!iterval.value().equals(correct)) {
+									System.out.printf("Bad iteration: %d: %s != %s\n", y, intree, correct);
+									throw new IllegalStateException();
+								}
+							}
+						}
+						for (; y < end; y++) {
+							if (rands.get(y) != null) {
+								System.out.printf("%d corresponds to %d\n", y, rands.get(y));
+								System.out.println("Iteration ended early.");
 								throw new IllegalStateException();
 							}
 						}
-						for (; iterval.range().contains(y); y++) {
-							correct = rands.get(y);
-							if (!iterval.value().equals(correct)) {
-								System.out.printf("Bad iteration: %d: %s != %s\n", y, intree, correct);
-								throw new IllegalStateException();
-							}
-						}
-					}
-					for (; y < end; y++) {
-						if (rands.get(y) != null) {
-							System.out.printf("%d corresponds to %d\n", y, rands.get(y));
-							System.out.println("Iteration ended early.");
-							throw new IllegalStateException();
-						}
+					} catch (Exception e) {
+						System.out.printf("Was reading from %d to %d\n", start, end);
+						e.printStackTrace();
+						System.exit(1);
 					}
 				}
 			}

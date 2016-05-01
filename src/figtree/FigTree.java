@@ -381,6 +381,9 @@ public class FigTree<V> {
 			rs = rs.pathprev;
 		}
 		
+		if (start == 722 && end == 849)
+			System.out.printf("Starting at %s\n", rs.entry);
+		
 		final FigTreeIterState rsfinal = rs;
 		
 		return new Iterator<Fig>() {
@@ -406,7 +409,7 @@ public class FigTree<V> {
 							/* First, descend a subtree until we reach a leaf. */
 							
 							/* Skip remaining entries if we've moved past the right of the valid interval. */
-							if (rs.valid.rightOverlaps(rs.entry.interval())) {
+							if (rs.valid.rightOverlaps(rs.entry.interval()) || rs.valid.leftOf(rs.entry.interval())) {
 								rs.entry = null;
 							} else {
 								int leftlimit, rightlimit;
@@ -475,7 +478,7 @@ public class FigTree<V> {
 							 * node where we started), or the subtree is empty, backtrack up
 							 * the tree.
 							 */
-							while (rs.entry == null) {
+							while (rs.entry == null || !rs.valid.overlaps(rs.entry.interval())) {
 								rs = rs.pathprev;
 								// If we go past the end of the tree, return null for the unmapped bytes
 								if (rs == null) {
