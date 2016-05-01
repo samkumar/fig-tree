@@ -306,6 +306,21 @@ public class FigTree<V> {
 		return null;
 	}
 	
+	public class Fig {
+		public Fig(Interval range, V value) {
+			this.range = range;
+			this.value = value;
+		}
+		public Interval range() {
+			return this.range;
+		}
+		public V value() {
+			return this.value;
+		}
+		private Interval range;
+		private V value;
+	}
+	
 	/* This is used just like a struct. */
 	private class FigTreeIterState {
 		/*
@@ -330,7 +345,7 @@ public class FigTree<V> {
 		private FigTreeIterState pathprev;
 	}
 	
-	public Iterator<V> read(int start, int end) {
+	public Iterator<Fig> read(int start, int end) {
 		// First, find the start
 		Interval initvalid = new Interval(Integer.MIN_VALUE, Integer.MAX_VALUE);
 		FigTreeIterState rs = new FigTreeIterState(this.root, initvalid, null);
@@ -359,19 +374,27 @@ public class FigTree<V> {
 			} while (rs.node != null);
 		
 		/* If rs.entry == null (equivalently, rs.node == null), then we didn't
-		 * find the exact starting byte. So, stop at the lowest node we got to.
+		 * find the exact starting byte. So, stop at the lowest node we got to that
+		 * actually has some valid content.
 		 */
-		while (rs != null && rs.entry == null) {
+		while (rs != null && (rs.entry == null || rs.valid.leftOf(rs.entry.interval()))) {
 			rs = rs.pathprev;
 		}
 		
 		final FigTreeIterState rsfinal = rs;
 		
-		return new Iterator<V>() {
-			public V next() {
+		return new Iterator<Fig>() {
+			/* Returns null if nothing is left. */
+			public Fig next() {
+				if (this.cached != null) {
+					Fig toreturn = this.cached;
+					this.cached = null;
+					return toreturn;
+				}
 				if (this.position >= end) {
 					throw new NoSuchElementException();
 				}
+				Interval rvint = null;
 				V rv = null;
 				
 				notatend:
@@ -409,9 +432,15 @@ public class FigTree<V> {
 											if (rs.entryiter.hasNext()) {
 												// So that we know to process it when we come back up here
 												rs.entry = rs.entryiter.next();
+												
+												/* If this entry is to the right of the valid range, skip
+												 * it.
+												 */
 												if (rs.entry.interval().rightOf(rs.valid)) {
 													rs.entry = null;
 												}
+											} else {
+												throw new IllegalArgumentException("Else case was reached");
 											}
 											
 											/* Skip entries to the left of the valid interval. */
@@ -454,20 +483,36 @@ public class FigTree<V> {
 								}
 							}
 						}
-					if (rs.entry.interval().contains(this.position)) {
+						// At this point rs.entry is the next entry
+						rvint = this.rs.entry.interval().restrict(this.rs.valid, false);
 						rv = this.rs.entry.value();
 					}
+				if (rs == null) {
+					// We're at the end of the tree, so just return null
+					this.position = end;
+					throw new NoSuchElementException();
 				}
-				this.position++;
-				return rv;
+				this.position = rvint.right() + 1;
+				return new Fig(rvint, rv);
 			}
 			
+			/* Returns true if there MAY be a subtree returned by next() (it may still return null). */
 			public boolean hasNext() {
-				return this.position < end;
+				if (this.cached != null) {
+					return true;
+				} else {
+					try {
+						this.cached = this.next();
+						return true;
+					} catch (NoSuchElementException nsee) {
+						return false;
+					}
+				}
 			}
 			
-			private int position = start;
+			private int position = start; //rsfinal == null ? end : rsfinal.entry.interval().left();
 			private FigTreeIterState rs = rsfinal;
+			private Fig cached;
 		};
 	}
 	

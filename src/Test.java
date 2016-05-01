@@ -37,10 +37,51 @@ public class Test {
 		System.out.println(f);
 		System.out.println(f.lookup(4));
 		
+		FigTree<Integer> c = new FigTree<Integer>(3);
+		Interval c1 = new Interval(592, 747);
+		Interval c2 = new Interval(582, 782);
+		Interval c3 = new Interval(352, 353);
+		Interval c4 = new Interval(430, 771);
+		Interval c5 = new Interval(484, 828);
+		c.write(c1, 0x77832d2);
+		c.write(c2, 0x8b1f4cf);
+		c.write(c3, 0x6f46e7c3);
+		c.write(c4, 0x76a36219);
+		c.write(c5, 0x2f88bf80);
+		System.out.println("C Test");
+		System.out.println(c);
+		
+		FigTree<Integer> f4 = new FigTree<Integer>(3);
+		f4.write(new Interval(1, 10), 0);
+		f4.write(new Interval(101, 110), 0);
+		f4.write(new Interval(201, 210), 100);
+		f4.write(new Interval(301, 310), 200);
+		f4.write(new Interval(401, 410), 300);
+		f4.write(new Interval(501, 510), 400);
+		f4.write(new Interval(601, 610), 500);
+		f4.write(new Interval(701, 710), 700);
+		f4.write(new Interval(801, 810), 800);
+		f4.write(new Interval(901, 910), 900);
+		f4.write(new Interval(1001, 1010), 1000);
+		f4.write(new Interval(1101, 1110), 1100);
+		f4.write(new Interval(1201, 1210), 1200);
+		f4.write(new Interval(1301, 1310), 1300);
+		
+		f4.write(new Interval(350, 710), 1000000);
+		
+		
+		
+		System.out.println(f4);
+		Iterator<FigTree<Integer>.Fig> range2 = f4.read(0, 1400);
+		while (range2.hasNext()) {
+			FigTree<Integer>.Fig f123 = range2.next();
+			System.out.println(f123.range() + ": " + f123.value());
+		}
+				
 		FigTree<Integer> f2 = new FigTree<Integer>(3);
 		HashMap<Integer, Integer> rands = new HashMap<Integer, Integer>();
-		final int NUM_INSERTS = 400;
-		Random rand = new Random(44);
+		final int NUM_INSERTS = 2000;
+		Random rand = new Random(47);
 		for (int k = 0; k < NUM_INSERTS; k++) {
 			int rand1 = rand.nextInt(NUM_INSERTS);
 			int rand2 = rand.nextInt(NUM_INSERTS);
@@ -50,7 +91,6 @@ public class Test {
 				rand1 = rand2;
 				rand2 = temp;
 			}
-			System.out.printf("Writing [%d, %d]: %d\n", rand1, rand2, rand3);
 			f2.write(new Interval(rand1, rand2), rand3);
 			for (int r = rand1; r <= rand2; r++) {
 				rands.put(r, rand3);
@@ -71,17 +111,35 @@ public class Test {
 			System.out.println("Running iterator tests");
 			for (int start = 0; start < NUM_INSERTS; start++) {
 				for (int end = start; end < NUM_INSERTS; end++) {
-					Iterator<Integer> range = f2.read(start, end);
-					//System.out.printf("Testing %d to %d\n", start, end);
-					for (int y = start; y < end; y++) {
-						Integer iterval = range.next();
-						Integer correct = rands.get(y);
-						if (((iterval == null) != (correct == null)) || (iterval != null && !iterval.equals(correct))) {
-							System.out.printf("Bad iteration: %d: %s != %s\n", y, iterval, correct);
+					//System.out.printf("Reading from %d to %d\n", start, end);
+					Iterator<FigTree<Integer>.Fig> range = f2.read(start, end);
+					int y = start;
+					while (range.hasNext()) {
+						FigTree<Integer>.Fig iterval = range.next();
+						Integer correct, intree;
+						//System.out.printf("%s: %s\n", iterval.range(), iterval.value());
+						intree = iterval.value();
+						for (; iterval.range().rightOf(y); y++) {
+							correct = rands.get(y);
+							if (correct != null) {
+								System.out.printf("Bad iteration: %d: (nothing) != %s\n", y, correct);
+								throw new IllegalStateException();
+							}
+						}
+						for (; iterval.range().contains(y); y++) {
+							correct = rands.get(y);
+							if (!iterval.value().equals(correct)) {
+								System.out.printf("Bad iteration: %d: %s != %s\n", y, intree, correct);
+								throw new IllegalStateException();
+							}
 						}
 					}
-					if (range.hasNext()) {
-						System.out.println("Iteration did not end.");
+					for (; y < end; y++) {
+						if (rands.get(y) != null) {
+							System.out.printf("%d corresponds to %d\n", y, rands.get(y));
+							System.out.println("Iteration ended early.");
+							throw new IllegalStateException();
+						}
 					}
 				}
 			}
